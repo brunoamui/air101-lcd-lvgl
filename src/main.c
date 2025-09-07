@@ -12,6 +12,7 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_random.h"
 #include "driver/spi_master.h"
 #include "driver/gpio.h"
 
@@ -50,6 +51,12 @@ static lv_indev_t *indev;
 
 // UI elements
 static lv_obj_t *cursor_coords_label = NULL;
+static lv_obj_t *current_chart = NULL;
+static lv_chart_series_t *current_series_1 = NULL;
+static lv_chart_series_t *current_series_2 = NULL;
+static lv_obj_t *chart_title = NULL;
+static lv_obj_t *current_values_label = NULL;
+static bool show_chart = false;
 
 // Joystick state
 static bool joystick_pressed = false;
@@ -61,12 +68,16 @@ void spi_init(void);
 void display_init(void);
 void lvgl_flush_cb(lv_display_t *disp_drv, const lv_area_t *area, uint8_t *px_map);
 void create_demo_widgets(void);
+void create_current_monitor_chart(void);
 static void lvgl_tick_task(void *arg);
 static void lvgl_tick_callback(void *arg);
 void joystick_init(void);
 void joystick_read(lv_indev_t *indev_drv, lv_indev_data_t *data);
 static void joystick_task(void *arg);
 static void button_click_handler(lv_event_t *e);
+static void update_current_readings(void);
+float get_current_reading_1(void);
+float get_current_reading_2(void);
 
 /**
  * @brief Initialize SPI for display communication
@@ -273,54 +284,176 @@ void create_demo_widgets(void) {
 }
 
 /**
+ * @brief Get current reading for channel 1 (placeholder for real sensor)
+ * @return Current value in Amperes (-10A to +10A)
+ */
+float get_current_reading_1(void) {
+    // TODO: Replace with actual current sensor reading (e.g., ACS712, INA219)
+    // For now, generate random current values for demonstration
+    static float base_current_1 = 0.0f;
+    
+    // Simulate fluctuating current with some drift
+    base_current_1 += ((float)(esp_random() % 200) - 100.0f) / 100.0f; // ±1A change
+    
+    // Keep within realistic bounds
+    if (base_current_1 > 10.0f) base_current_1 = 10.0f;
+    if (base_current_1 < -10.0f) base_current_1 = -10.0f;
+    
+    return base_current_1;
+}
+
+/**
+ * @brief Get current reading for channel 2 (placeholder for real sensor)
+ * @return Current value in Amperes (-10A to +10A)
+ */
+float get_current_reading_2(void) {
+    // TODO: Replace with actual current sensor reading (e.g., ACS712, INA219)
+    // For now, generate random current values for demonstration
+    static float base_current_2 = 0.0f;
+    
+    // Simulate different pattern for second channel
+    base_current_2 += ((float)(esp_random() % 150) - 75.0f) / 150.0f; // ±0.5A change
+    
+    // Keep within realistic bounds
+    if (base_current_2 > 10.0f) base_current_2 = 10.0f;
+    if (base_current_2 < -10.0f) base_current_2 = -10.0f;
+    
+    return base_current_2;
+}
+
+/**
+ * @brief Update current readings and chart data
+ */
+static void update_current_readings(void) {
+    if (!show_chart || !current_chart) return;
+    
+    // Get new current readings
+    float current_1 = get_current_reading_1();
+    float current_2 = get_current_reading_2();
+    
+    // Convert to chart scale (0-200, where 100 = 0A, 0 = -10A, 200 = +10A)
+    int32_t chart_value_1 = (int32_t)((current_1 + 10.0f) * 10.0f);
+    int32_t chart_value_2 = (int32_t)((current_2 + 10.0f) * 10.0f);
+    
+    // Add new points to chart series
+    lv_chart_set_next_value(current_chart, current_series_1, chart_value_1);
+    lv_chart_set_next_value(current_chart, current_series_2, chart_value_2);
+    
+    // Update current values display
+    if (current_values_label) {
+        char current_text[64];
+        snprintf(current_text, sizeof(current_text), "I1: %.1fA  I2: %.1fA", current_1, current_2);
+        lv_label_set_text(current_values_label, current_text);
+    }
+    
+    ESP_LOGI(TAG, "Current readings - I1: %.2fA, I2: %.2fA", current_1, current_2);
+}
+
+/**
+ * @brief Create current monitoring chart
+ */
+void create_current_monitor_chart(void) {
+    ESP_LOGI(TAG, "Creating current monitoring chart");
+    
+    // Get active screen
+    lv_obj_t *scr = lv_screen_active();
+    
+    // Set background to dark theme for monitoring
+    lv_obj_set_style_bg_color(scr, lv_color_hex(0x1a1a1a), LV_PART_MAIN);
+    
+    // Create chart title
+    chart_title = lv_label_create(scr);
+    lv_label_set_text(chart_title, "Current Monitor");
+    lv_obj_set_width(chart_title, DISPLAY_WIDTH - 4);
+    lv_obj_set_style_text_color(chart_title, lv_color_hex(0xffffff), LV_PART_MAIN);
+    lv_obj_set_style_text_align(chart_title, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_obj_set_style_text_font(chart_title, &lv_font_montserrat_12, LV_PART_MAIN);
+    lv_obj_align(chart_title, LV_ALIGN_TOP_MID, 0, 2);
+    
+    // Create chart widget
+    current_chart = lv_chart_create(scr);
+    lv_obj_set_size(current_chart, DISPLAY_WIDTH - 6, 100); // Leave small margins
+    lv_obj_align(current_chart, LV_ALIGN_CENTER, 0, 0);
+    
+    // Configure chart properties
+    lv_chart_set_type(current_chart, LV_CHART_TYPE_LINE);
+    lv_chart_set_range(current_chart, LV_CHART_AXIS_PRIMARY_Y, 0, 200); // 0 = -10A, 200 = +10A
+    lv_chart_set_point_count(current_chart, 30); // Show last 30 readings
+    lv_chart_set_div_line_count(current_chart, 5, 6); // Grid lines
+    
+    // Style the chart
+    lv_obj_set_style_bg_color(current_chart, lv_color_hex(0x2a2a2a), LV_PART_MAIN);
+    lv_obj_set_style_border_color(current_chart, lv_color_hex(0x555555), LV_PART_MAIN);
+    lv_obj_set_style_border_width(current_chart, 1, LV_PART_MAIN);
+    
+    // Create data series for both current channels
+    current_series_1 = lv_chart_add_series(current_chart, lv_color_hex(0xff6b6b), LV_CHART_AXIS_PRIMARY_Y); // Red for channel 1
+    current_series_2 = lv_chart_add_series(current_chart, lv_color_hex(0x4ecdc4), LV_CHART_AXIS_PRIMARY_Y); // Cyan for channel 2
+    
+    // Initialize series with zero values (100 on scale = 0A)
+    for(int i = 0; i < 30; i++) {
+        lv_chart_set_next_value(current_chart, current_series_1, 100);
+        lv_chart_set_next_value(current_chart, current_series_2, 100);
+    }
+    
+    // Create current values display
+    current_values_label = lv_label_create(scr);
+    lv_label_set_text(current_values_label, "I1: 0.0A  I2: 0.0A");
+    lv_obj_set_width(current_values_label, DISPLAY_WIDTH - 4);
+    lv_obj_set_style_text_color(current_values_label, lv_color_hex(0xcccccc), LV_PART_MAIN);
+    lv_obj_set_style_text_align(current_values_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_obj_set_style_text_font(current_values_label, &lv_font_montserrat_12, LV_PART_MAIN);
+    lv_obj_align(current_values_label, LV_ALIGN_BOTTOM_MID, 0, -15);
+    
+    // Create legend
+    lv_obj_t *legend = lv_label_create(scr);
+    lv_label_set_text(legend, "■I1 ■I2 (-10A to +10A)");
+    lv_obj_set_width(legend, DISPLAY_WIDTH - 4);
+    lv_obj_set_style_text_color(legend, lv_color_hex(0x888888), LV_PART_MAIN);
+    lv_obj_set_style_text_align(legend, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_obj_set_style_text_font(legend, &lv_font_montserrat_12, LV_PART_MAIN);
+    lv_obj_align(legend, LV_ALIGN_BOTTOM_MID, 0, -2);
+    
+    ESP_LOGI(TAG, "Current monitoring chart created");
+}
+
+/**
  * @brief Button click event handler
  */
 static void button_click_handler(lv_event_t *e) {
-    static int click_count = 0;
-    click_count++;
+    ESP_LOGI(TAG, "🎉 Button clicked! Switching to current monitor");
     
-    ESP_LOGI(TAG, "🎉 Button clicked! Count: %d", click_count);
-    
-    // Get references to widgets (simple approach for demo)
-    lv_obj_t *btn = lv_event_get_target(e);
+    // Get references to widgets
     lv_obj_t *scr = lv_screen_active();
     
-    // Change button text based on click count
-    lv_obj_t *btn_label = lv_obj_get_child(btn, 0);
-    switch (click_count % 4) {
-        case 1:
-            lv_label_set_text(btn_label, "Clicked!");
-            lv_obj_set_style_bg_color(scr, lv_color_hex(0x4a0e4e), LV_PART_MAIN); // Purple
-            break;
-        case 2:
-            lv_label_set_text(btn_label, "Again!");
-            lv_obj_set_style_bg_color(scr, lv_color_hex(0x0e4b4a), LV_PART_MAIN); // Teal
-            break;
-        case 3:
-            lv_label_set_text(btn_label, "More!");
-            lv_obj_set_style_bg_color(scr, lv_color_hex(0x4a2c0e), LV_PART_MAIN); // Brown
-            break;
-        case 0:
-            lv_label_set_text(btn_label, "Press Me");
-            lv_obj_set_style_bg_color(scr, lv_color_hex(0x0000ff), LV_PART_MAIN); // Pure blue
-            break;
-    }
-    
-    // Update progress bar
-    lv_obj_t *bar = NULL;
-    // Find the progress bar (it's the 4th child: title, button, bar, status)
-    for(int i = 0; i < lv_obj_get_child_count(scr); i++) {
-        lv_obj_t *child = lv_obj_get_child(scr, i);
-        if(lv_obj_check_type(child, &lv_bar_class)) {
-            bar = child;
-            break;
-        }
-    }
-    
-    if(bar) {
-        int new_value = (click_count * 20) % 101; // Cycle 0-100
-        lv_bar_set_value(bar, new_value, LV_ANIM_ON);
-        ESP_LOGI(TAG, "Progress updated to %d%%", new_value);
+    if (!show_chart) {
+        // Hide demo widgets and show chart
+        ESP_LOGI(TAG, "Showing current monitoring chart");
+        
+        // Clear screen by deleting all children
+        lv_obj_clean(scr);
+        
+        // Create and show chart
+        create_current_monitor_chart();
+        show_chart = true;
+        
+    } else {
+        // Hide chart and show demo widgets
+        ESP_LOGI(TAG, "Showing demo widgets");
+        
+        // Clear screen
+        lv_obj_clean(scr);
+        
+        // Reset chart references
+        current_chart = NULL;
+        current_series_1 = NULL;
+        current_series_2 = NULL;
+        chart_title = NULL;
+        current_values_label = NULL;
+        
+        // Recreate demo widgets
+        create_demo_widgets();
+        show_chart = false;
     }
 }
 
@@ -411,6 +544,23 @@ void joystick_read(lv_indev_t *indev_drv, lv_indev_data_t *data) {
         char coord_text[32];
         snprintf(coord_text, sizeof(coord_text), "X:%d Y:%d", cursor_x, cursor_y);
         lv_label_set_text(cursor_coords_label, coord_text);
+    }
+}
+
+/**
+ * @brief Current monitoring task - updates chart data
+ */
+static void current_monitor_task(void *arg) {
+    ESP_LOGI(TAG, "Current monitoring task started");
+    
+    while (1) {
+        // Update current readings if chart is visible
+        if (show_chart) {
+            update_current_readings();
+        }
+        
+        // Update every 500ms for smooth but not overwhelming updates
+        vTaskDelay(pdMS_TO_TICKS(500));
     }
 }
 
@@ -525,6 +675,9 @@ void app_main(void) {
     
     // Start joystick monitoring task
     xTaskCreate(joystick_task, "joystick", 2048, NULL, 1, NULL);
+    
+    // Start current monitoring task
+    xTaskCreate(current_monitor_task, "current_monitor", 3072, NULL, 1, NULL);
 
     ESP_LOGI(TAG, "LVGL demo started successfully!");
 
