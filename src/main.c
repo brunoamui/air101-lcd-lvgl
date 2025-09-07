@@ -48,6 +48,9 @@ static lv_color_t *disp_buf;
 // LVGL input device
 static lv_indev_t *indev;
 
+// UI elements
+static lv_obj_t *cursor_coords_label = NULL;
+
 // Joystick state
 static bool joystick_pressed = false;
 static int16_t joystick_x = 0;
@@ -155,7 +158,7 @@ void display_init(void) {
     send_data(0x05); // 16-bit color
     
     send_cmd(0x36); // Memory access control
-    send_data(0xC8); // Row/col addr, bottom to top refresh
+    send_data(0xC0); // Row/col addr, top to bottom refresh (adjusted)
     
     send_cmd(0x29); // Display on
     vTaskDelay(pdMS_TO_TICKS(100));
@@ -167,21 +170,22 @@ void display_init(void) {
  * @brief Set display area for drawing
  */
 void set_addr_window(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2) {
-    // Calculate offsets to center 80x160 display in 128x160 ST7735 memory
-    uint16_t x_offset = 24;  // (128 - 80) / 2 = 24 to center horizontally
-    uint16_t y_offset = 0;   // No vertical offset needed
+    // ST7735 specific offsets for 80x160 display
+    // These values are commonly used for 0.96" ST7735 displays
+    uint16_t x_offset = 26;  // Column offset to align display properly  
+    uint16_t y_offset = 1;   // Row offset to align display properly
     
     send_cmd(0x2A); // Column address set
     send_data(0x00);
-    send_data(x1 + x_offset); // Start col with calculated offset
+    send_data(x1 + x_offset); // Start col with offset
     send_data(0x00);
-    send_data(x2 + x_offset); // End col with calculated offset
+    send_data(x2 + x_offset); // End col with offset
 
     send_cmd(0x2B); // Row address set  
     send_data(0x00);
-    send_data(y1 + y_offset); // Start row with calculated offset
+    send_data(y1 + y_offset); // Start row with offset
     send_data(0x00);
-    send_data(y2 + y_offset); // End row with calculated offset
+    send_data(y2 + y_offset); // End row with offset
 
     send_cmd(0x2C); // Memory write
 }
@@ -224,7 +228,7 @@ void create_demo_widgets(void) {
     lv_obj_t *scr = lv_screen_active();
     
     // Set background color
-    lv_obj_set_style_bg_color(scr, lv_color_hex(0x003a57), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(scr, lv_color_hex(0x0000ff), LV_PART_MAIN); // Pure blue
     
     // Create title label with width constraint and text wrapping
     lv_obj_t *title = lv_label_create(scr);
@@ -256,14 +260,14 @@ void create_demo_widgets(void) {
     lv_obj_align(bar, LV_ALIGN_BOTTOM_MID, 0, -30);
     lv_bar_set_value(bar, 70, LV_ANIM_OFF);
     
-    // Create status text with width constraint and text wrapping
-    lv_obj_t *status = lv_label_create(scr);
-    lv_label_set_text(status, "System Ready");
-    lv_obj_set_width(status, DISPLAY_WIDTH - 4); // Leave 2px margin on each side
-    lv_label_set_long_mode(status, LV_LABEL_LONG_WRAP); // Enable text wrapping
-    lv_obj_set_style_text_color(status, lv_color_hex(0x00ff00), LV_PART_MAIN);
-    lv_obj_set_style_text_align(status, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-    lv_obj_align(status, LV_ALIGN_BOTTOM_MID, 0, -10);
+    // Create cursor coordinates display with small font
+    cursor_coords_label = lv_label_create(scr);
+    lv_label_set_text(cursor_coords_label, "X:40 Y:80");
+    lv_obj_set_width(cursor_coords_label, DISPLAY_WIDTH - 4); // Leave 2px margin
+    lv_obj_set_style_text_color(cursor_coords_label, lv_color_hex(0x888888), LV_PART_MAIN); // Gray color
+    lv_obj_set_style_text_align(cursor_coords_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_obj_set_style_text_font(cursor_coords_label, &lv_font_montserrat_12, LV_PART_MAIN); // Small font
+    lv_obj_align(cursor_coords_label, LV_ALIGN_BOTTOM_MID, 0, -2);
     
     ESP_LOGI(TAG, "Demo widgets created");
 }
@@ -298,7 +302,7 @@ static void button_click_handler(lv_event_t *e) {
             break;
         case 0:
             lv_label_set_text(btn_label, "Press Me");
-            lv_obj_set_style_bg_color(scr, lv_color_hex(0x003a57), LV_PART_MAIN); // Original blue
+            lv_obj_set_style_bg_color(scr, lv_color_hex(0x0000ff), LV_PART_MAIN); // Pure blue
             break;
     }
     
@@ -360,10 +364,10 @@ void joystick_read(lv_indev_t *indev_drv, lv_indev_data_t *data) {
     
     uint32_t current_time = xTaskGetTickCount() * portTICK_PERIOD_MS;
     bool can_move = (current_time - last_move_time) > 100; // 100ms movement delay
+    bool moved = false;
     
     // Update cursor position based on button presses
     if (can_move) {
-        bool moved = false;
         
         if (left_pressed) {
             cursor_x -= 4;
@@ -401,6 +405,13 @@ void joystick_read(lv_indev_t *indev_drv, lv_indev_data_t *data) {
     joystick_x = cursor_x;
     joystick_y = cursor_y;
     joystick_pressed = center_pressed;
+    
+    // Update cursor coordinates display (only when cursor moves to reduce CPU load)
+    if (cursor_coords_label && moved) {
+        char coord_text[32];
+        snprintf(coord_text, sizeof(coord_text), "X:%d Y:%d", cursor_x, cursor_y);
+        lv_label_set_text(cursor_coords_label, coord_text);
+    }
 }
 
 /**
@@ -440,7 +451,7 @@ static void lvgl_tick_callback(void *arg) {
 static void lvgl_tick_task(void *arg) {
     while (1) {
         // Let higher priority tasks run first
-        vTaskDelay(pdMS_TO_TICKS(1));
+        vTaskDelay(pdMS_TO_TICKS(5));
         
         // Handle LVGL timers with timeout to prevent blocking
         uint32_t task_delay_ms = lv_timer_handler();
@@ -449,7 +460,7 @@ static void lvgl_tick_task(void *arg) {
         if (task_delay_ms > 0) {
             vTaskDelay(pdMS_TO_TICKS(task_delay_ms));
         } else {
-            vTaskDelay(pdMS_TO_TICKS(1));
+            vTaskDelay(pdMS_TO_TICKS(10)); // Increase delay to reduce CPU load
         }
     }
 }
