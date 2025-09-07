@@ -56,6 +56,7 @@ static lv_chart_series_t *current_series_1 = NULL;
 static lv_chart_series_t *current_series_2 = NULL;
 static lv_obj_t *chart_title = NULL;
 static lv_obj_t *current_values_label = NULL;
+static lv_obj_t *chart_click_overlay = NULL;
 static bool show_chart = false;
 
 // Joystick state
@@ -405,6 +406,14 @@ void create_current_monitor_chart(void) {
     lv_obj_set_style_text_font(current_values_label, &lv_font_montserrat_12, LV_PART_MAIN);
     lv_obj_align(current_values_label, LV_ALIGN_BOTTOM_MID, 0, 0); // Moved 5px up from +5 to 0
     
+    // Create invisible clickable overlay for returning to demo mode
+    chart_click_overlay = lv_obj_create(scr);
+    lv_obj_set_size(chart_click_overlay, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+    lv_obj_set_pos(chart_click_overlay, 0, 0);
+    lv_obj_set_style_bg_opa(chart_click_overlay, 0, LV_PART_MAIN); // Transparent
+    lv_obj_set_style_border_opa(chart_click_overlay, 0, LV_PART_MAIN); // No border
+    lv_obj_add_event_cb(chart_click_overlay, button_click_handler, LV_EVENT_CLICKED, NULL);
+    
     ESP_LOGI(TAG, "Current monitoring chart created");
 }
 
@@ -441,6 +450,7 @@ static void button_click_handler(lv_event_t *e) {
         current_series_2 = NULL;
         chart_title = NULL;
         current_values_label = NULL;
+        chart_click_overlay = NULL;
         
         // Recreate demo widgets
         create_demo_widgets();
@@ -525,6 +535,13 @@ void joystick_read(lv_indev_t *indev_drv, lv_indev_data_t *data) {
     data->point.y = cursor_y;
     // Center button always works for toggling between modes
     data->state = center_pressed ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+    
+    // In chart mode, we need to ensure clicks can be registered on any widget
+    // Set cursor to center of screen for reliable button detection
+    if (show_chart && center_pressed) {
+        data->point.x = DISPLAY_WIDTH / 2;
+        data->point.y = DISPLAY_HEIGHT / 2;
+    }
     
     // Store for debugging
     joystick_x = cursor_x;
