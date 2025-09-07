@@ -378,7 +378,7 @@ void create_current_monitor_chart(void) {
     // Configure chart properties
     lv_chart_set_type(current_chart, LV_CHART_TYPE_LINE);
     lv_chart_set_range(current_chart, LV_CHART_AXIS_PRIMARY_Y, 0, 200); // 0 = -10A, 200 = +10A
-    lv_chart_set_point_count(current_chart, 30); // Show last 30 readings
+    lv_chart_set_point_count(current_chart, 20); // Show last 20 readings (reduced for memory)
     lv_chart_set_div_line_count(current_chart, 5, 6); // Grid lines
     
     // Style the chart
@@ -391,7 +391,7 @@ void create_current_monitor_chart(void) {
     current_series_2 = lv_chart_add_series(current_chart, lv_color_hex(0x4ecdc4), LV_CHART_AXIS_PRIMARY_Y); // Cyan for channel 2
     
     // Initialize series with zero values (100 on scale = 0A)
-    for(int i = 0; i < 30; i++) {
+    for(int i = 0; i < 20; i++) {
         lv_chart_set_next_value(current_chart, current_series_1, 100);
         lv_chart_set_next_value(current_chart, current_series_2, 100);
     }
@@ -403,16 +403,7 @@ void create_current_monitor_chart(void) {
     lv_obj_set_style_text_color(current_values_label, lv_color_hex(0xcccccc), LV_PART_MAIN);
     lv_obj_set_style_text_align(current_values_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_set_style_text_font(current_values_label, &lv_font_montserrat_12, LV_PART_MAIN);
-    lv_obj_align(current_values_label, LV_ALIGN_BOTTOM_MID, 0, -15);
-    
-    // Create legend
-    lv_obj_t *legend = lv_label_create(scr);
-    lv_label_set_text(legend, "■I1 ■I2 (-10A to +10A)");
-    lv_obj_set_width(legend, DISPLAY_WIDTH - 4);
-    lv_obj_set_style_text_color(legend, lv_color_hex(0x888888), LV_PART_MAIN);
-    lv_obj_set_style_text_align(legend, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-    lv_obj_set_style_text_font(legend, &lv_font_montserrat_12, LV_PART_MAIN);
-    lv_obj_align(legend, LV_ALIGN_BOTTOM_MID, 0, -2);
+    lv_obj_align(current_values_label, LV_ALIGN_BOTTOM_MID, 0, -5); // Moved closer to bottom
     
     ESP_LOGI(TAG, "Current monitoring chart created");
 }
@@ -640,8 +631,8 @@ void app_main(void) {
     ESP_ERROR_CHECK(esp_timer_create(&lvgl_tick_timer_args, &lvgl_tick_timer));
     ESP_ERROR_CHECK(esp_timer_start_periodic(lvgl_tick_timer, 1000)); // 1ms (1000us) period
 
-    // Allocate display buffer
-    size_t buf_size = DISPLAY_WIDTH * 40; // 40 lines buffer
+    // Allocate display buffer - reduced size to save memory
+    size_t buf_size = DISPLAY_WIDTH * 20; // 20 lines buffer (reduced from 40)
     disp_buf = heap_caps_malloc(buf_size * sizeof(lv_color_t), MALLOC_CAP_DMA);
     if (!disp_buf) {
         ESP_LOGE(TAG, "Failed to allocate display buffer");
@@ -670,14 +661,14 @@ void app_main(void) {
     // Create demo UI
     create_demo_widgets();
 
-    // Start LVGL task with lower priority to allow other tasks to run
-    xTaskCreate(lvgl_tick_task, "lvgl_tick", 4096, NULL, 2, NULL);
+    // Start LVGL task with increased stack size for chart rendering
+    xTaskCreate(lvgl_tick_task, "lvgl_tick", 8192, NULL, 2, NULL); // Increased from 4096
     
     // Start joystick monitoring task
     xTaskCreate(joystick_task, "joystick", 2048, NULL, 1, NULL);
     
-    // Start current monitoring task
-    xTaskCreate(current_monitor_task, "current_monitor", 3072, NULL, 1, NULL);
+    // Start current monitoring task with sufficient stack
+    xTaskCreate(current_monitor_task, "current_monitor", 4096, NULL, 1, NULL); // Increased from 3072
 
     ESP_LOGI(TAG, "LVGL demo started successfully!");
 
