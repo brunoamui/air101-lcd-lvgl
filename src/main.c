@@ -34,8 +34,8 @@ static const char* TAG = "LVGL_DEMO";
 #define BUTTON_DOWN 5      // Down button
 #define BUTTON_RIGHT 13    // Right button
 
-// Display dimensions
-#define DISPLAY_WIDTH 128
+// Display dimensions (actual physical size)
+#define DISPLAY_WIDTH 80
 #define DISPLAY_HEIGHT 160
 
 // SPI and display handles
@@ -167,17 +167,21 @@ void display_init(void) {
  * @brief Set display area for drawing
  */
 void set_addr_window(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2) {
+    // Calculate offsets to center 80x160 display in 128x160 ST7735 memory
+    uint16_t x_offset = 24;  // (128 - 80) / 2 = 24 to center horizontally
+    uint16_t y_offset = 0;   // No vertical offset needed
+    
     send_cmd(0x2A); // Column address set
     send_data(0x00);
-    send_data(x1 + 2); // Start col (with offset)
+    send_data(x1 + x_offset); // Start col with calculated offset
     send_data(0x00);
-    send_data(x2 + 2); // End col
+    send_data(x2 + x_offset); // End col with calculated offset
 
     send_cmd(0x2B); // Row address set  
     send_data(0x00);
-    send_data(y1 + 1); // Start row (with offset)
+    send_data(y1 + y_offset); // Start row with calculated offset
     send_data(0x00);
-    send_data(y2 + 1); // End row
+    send_data(y2 + y_offset); // End row with calculated offset
 
     send_cmd(0x2C); // Memory write
 }
@@ -222,12 +226,14 @@ void create_demo_widgets(void) {
     // Set background color
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x003a57), LV_PART_MAIN);
     
-    // Create title label
+    // Create title label with width constraint and text wrapping
     lv_obj_t *title = lv_label_create(scr);
-    lv_label_set_text(title, "Air101-LCD\nLVGL Demo");
+    lv_label_set_text(title, "Air101-LCD LVGL Demo");
+    lv_obj_set_width(title, DISPLAY_WIDTH - 4); // Leave 2px margin on each side
+    lv_label_set_long_mode(title, LV_LABEL_LONG_WRAP); // Enable text wrapping
     lv_obj_set_style_text_color(title, lv_color_hex(0xffffff), LV_PART_MAIN);
     lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 10);
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 5);
     
     // Create a simple button
     lv_obj_t *btn = lv_btn_create(scr);
@@ -236,6 +242,9 @@ void create_demo_widgets(void) {
     
     lv_obj_t *btn_label = lv_label_create(btn);
     lv_label_set_text(btn_label, "Press Me");
+    lv_obj_set_width(btn_label, 66); // Button width (70) minus padding
+    lv_label_set_long_mode(btn_label, LV_LABEL_LONG_WRAP); // Enable text wrapping
+    lv_obj_set_style_text_align(btn_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_center(btn_label);
     
     // Add click event handler
@@ -247,10 +256,13 @@ void create_demo_widgets(void) {
     lv_obj_align(bar, LV_ALIGN_BOTTOM_MID, 0, -30);
     lv_bar_set_value(bar, 70, LV_ANIM_OFF);
     
-    // Create status text
+    // Create status text with width constraint and text wrapping
     lv_obj_t *status = lv_label_create(scr);
     lv_label_set_text(status, "System Ready");
+    lv_obj_set_width(status, DISPLAY_WIDTH - 4); // Leave 2px margin on each side
+    lv_label_set_long_mode(status, LV_LABEL_LONG_WRAP); // Enable text wrapping
     lv_obj_set_style_text_color(status, lv_color_hex(0x00ff00), LV_PART_MAIN);
+    lv_obj_set_style_text_align(status, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_align(status, LV_ALIGN_BOTTOM_MID, 0, -10);
     
     ESP_LOGI(TAG, "Demo widgets created");
@@ -342,7 +354,7 @@ void joystick_read(lv_indev_t *indev_drv, lv_indev_data_t *data) {
     bool right_pressed = !gpio_get_level(BUTTON_RIGHT);
     
     // Static cursor position
-    static int16_t cursor_x = 50; // Center of 100px screen
+    static int16_t cursor_x = 40; // Center of 80px screen
     static int16_t cursor_y = 80; // Center of 160px screen
     static uint32_t last_move_time = 0;
     
