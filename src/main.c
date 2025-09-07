@@ -403,7 +403,7 @@ void create_current_monitor_chart(void) {
     lv_obj_set_style_text_color(current_values_label, lv_color_hex(0xcccccc), LV_PART_MAIN);
     lv_obj_set_style_text_align(current_values_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_set_style_text_font(current_values_label, &lv_font_montserrat_12, LV_PART_MAIN);
-    lv_obj_align(current_values_label, LV_ALIGN_BOTTOM_MID, 0, +5); // Moved 10px lower from -5 to +5
+    lv_obj_align(current_values_label, LV_ALIGN_BOTTOM_MID, 0, 0); // Moved 5px up from +5 to 0
     
     ESP_LOGI(TAG, "Current monitoring chart created");
 }
