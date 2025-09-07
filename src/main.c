@@ -342,7 +342,7 @@ static void update_current_readings(void) {
     // Update current values display
     if (current_values_label) {
         char current_text[64];
-        snprintf(current_text, sizeof(current_text), "I1: %.1fA  I2: %.1fA", current_1, current_2);
+        snprintf(current_text, sizeof(current_text), "I1: %.1fA\nI2: %.1fA", current_1, current_2);
         lv_label_set_text(current_values_label, current_text);
     }
     
@@ -396,14 +396,14 @@ void create_current_monitor_chart(void) {
         lv_chart_set_next_value(current_chart, current_series_2, 100);
     }
     
-    // Create current values display
+    // Create current values display with line breaks
     current_values_label = lv_label_create(scr);
-    lv_label_set_text(current_values_label, "I1: 0.0A  I2: 0.0A");
+    lv_label_set_text(current_values_label, "I1: 0.0A\nI2: 0.0A");
     lv_obj_set_width(current_values_label, DISPLAY_WIDTH - 4);
     lv_obj_set_style_text_color(current_values_label, lv_color_hex(0xcccccc), LV_PART_MAIN);
     lv_obj_set_style_text_align(current_values_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_set_style_text_font(current_values_label, &lv_font_montserrat_12, LV_PART_MAIN);
-    lv_obj_align(current_values_label, LV_ALIGN_BOTTOM_MID, 0, -5); // Moved closer to bottom
+    lv_obj_align(current_values_label, LV_ALIGN_BOTTOM_MID, 0, +5); // Moved 10px lower from -5 to +5
     
     ESP_LOGI(TAG, "Current monitoring chart created");
 }
