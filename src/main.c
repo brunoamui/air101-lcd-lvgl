@@ -490,8 +490,8 @@ void joystick_read(lv_indev_t *indev_drv, lv_indev_data_t *data) {
     bool can_move = (current_time - last_move_time) > 100; // 100ms movement delay
     bool moved = false;
     
-    // Update cursor position based on button presses
-    if (can_move) {
+    // Update cursor position based on button presses (only in demo mode, not chart mode)
+    if (can_move && !show_chart) {
         
         if (left_pressed) {
             cursor_x -= 4;
@@ -523,6 +523,7 @@ void joystick_read(lv_indev_t *indev_drv, lv_indev_data_t *data) {
     // Update LVGL input data
     data->point.x = cursor_x;
     data->point.y = cursor_y;
+    // Center button always works for toggling between modes
     data->state = center_pressed ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
     
     // Store for debugging
@@ -530,8 +531,8 @@ void joystick_read(lv_indev_t *indev_drv, lv_indev_data_t *data) {
     joystick_y = cursor_y;
     joystick_pressed = center_pressed;
     
-    // Update cursor coordinates display (only when cursor moves to reduce CPU load)
-    if (cursor_coords_label && moved) {
+    // Update cursor coordinates display (only when cursor moves and not in chart mode)
+    if (cursor_coords_label && moved && !show_chart) {
         char coord_text[32];
         snprintf(coord_text, sizeof(coord_text), "X:%d Y:%d", cursor_x, cursor_y);
         lv_label_set_text(cursor_coords_label, coord_text);
