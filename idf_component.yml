@@ -1,0 +1,12 @@
+## IDF Component Manager Dependencies
+## For LVGL integration with ESP32-C3 and ST7735
+
+dependencies:
+  # LVGL graphics library v9
+  lvgl/lvgl: "^9.1.0"
+  
+  # ESP LVGL port for easier integration with ESP-IDF
+  espressif/esp_lvgl_port: "^2.3.0"
+  
+  # IDF Component Manager
+  idf: ">=5.0.0"

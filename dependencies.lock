@@ -1,0 +1,21 @@
+dependencies:
+  espressif/esp_lvgl_port:
+    component_hash: e720c95cf0667554a204591bb5fade4655fb2990465557041200fa44b5bc7556
+    source:
+      service_url: https://api.components.espressif.com/
+      type: service
+    version: 2.6.0
+  idf:
+    component_hash: null
+    source:
+      type: idf
+    version: 5.2.1
+  lvgl/lvgl:
+    component_hash: b702d642e03e95928046d5c6726558e6444e112420c77efa5fdb6650b0a13c5d
+    source:
+      service_url: https://api.components.espressif.com/
+      type: service
+    version: 9.3.0
+manifest_hash: 9ffde1263e0402449210bd6e2510ea2add268e05c903733e54959266a7603b6e
+target: esp32c3
+version: 1.0.0
