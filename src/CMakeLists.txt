@@ -2,7 +2,7 @@
 # Simple direct approach
 
 idf_component_register(
-    SRCS "main.c"
+    SRCS "ads1118_driver.c" "main.c"
     INCLUDE_DIRS "." "../include"
     REQUIRES 
         driver 

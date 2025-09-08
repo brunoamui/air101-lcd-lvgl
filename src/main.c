@@ -19,6 +19,9 @@
 // LVGL includes
 #include "lvgl.h"
 
+// ADS1118 ADC driver
+#include "ads1118_driver.h"
+
 static const char* TAG = "LVGL_DEMO";
 
 // Hardware pin definitions
@@ -59,6 +62,10 @@ static lv_obj_t *current_values_label = NULL;
 static lv_obj_t *chart_click_overlay = NULL;
 static bool show_chart = false;
 
+// ADS1118 ADC for current sensing
+static ads1118_handle_t ads1118_handle;
+static current_sensor_config_t current_sensor_config;
+
 // Joystick state
 static bool joystick_pressed = false;
 static int16_t joystick_x = 0;
@@ -67,6 +74,7 @@ static int16_t joystick_y = 0;
 // Forward declarations
 void spi_init(void);
 void display_init(void);
+void ads1118_current_sensor_init(void);
 void lvgl_flush_cb(lv_display_t *disp_drv, const lv_area_t *area, uint8_t *px_map);
 void create_demo_widgets(void);
 void create_current_monitor_chart(void);
@@ -285,41 +293,52 @@ void create_demo_widgets(void) {
 }
 
 /**
- * @brief Get current reading for channel 1 (placeholder for real sensor)
- * @return Current value in Amperes (-10A to +10A)
+ * @brief Initialize ADS1118 current sensor subsystem
  */
-float get_current_reading_1(void) {
-    // TODO: Replace with actual current sensor reading (e.g., ACS712, INA219)
-    // For now, generate random current values for demonstration
-    static float base_current_1 = 0.0f;
-    
-    // Simulate fluctuating current with some drift
-    base_current_1 += ((float)(esp_random() % 200) - 100.0f) / 100.0f; // ±1A change
-    
-    // Keep within realistic bounds
-    if (base_current_1 > 10.0f) base_current_1 = 10.0f;
-    if (base_current_1 < -10.0f) base_current_1 = -10.0f;
-    
-    return base_current_1;
+void ads1118_current_sensor_init(void) {
+    // Initialize ADS1118 configuration
+    ads1118_config_t config;
+    ads1118_get_default_config(&config);
+    config.pga = ADS1118_PGA_4_096V;       // ±4.096V for ACS712
+    config.data_rate = ADS1118_DR_128SPS;  // Balanced sample rate
+    config.mode = ADS1118_MODE_SINGLE_SHOT; // Power-efficient
+
+    // Initialize current sensor configuration (ACS712-20A)
+    ads1118_get_acs712_20a_config(&current_sensor_config);
+
+    // Initialize ADS1118
+    esp_err_t ret = ads1118_init(&ads1118_handle, &config);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "ADS1118 init failed: %s", esp_err_to_name(ret));
+    } else {
+        ESP_LOGI(TAG, "ADS1118 current sensor initialized");
+    }
 }
 
 /**
- * @brief Get current reading for channel 2 (placeholder for real sensor)
+ * @brief Get current reading for channel 1 using ADS1118 (AIN0 vs GND)
+ * @return Current value in Amperes (-10A to +10A)
+ */
+float get_current_reading_1(void) {
+    float current_a = 0.0f;
+    if (ads1118_read_current(&ads1118_handle, ADS1118_MUX_A0_GND, &current_sensor_config, &current_a) != ESP_OK) {
+        ESP_LOGW(TAG, "ADS1118 read current 1 failed, returning 0");
+        return 0.0f;
+    }
+    return current_a;
+}
+
+/**
+ * @brief Get current reading for channel 2 using ADS1118 (AIN1 vs GND)
  * @return Current value in Amperes (-10A to +10A)
  */
 float get_current_reading_2(void) {
-    // TODO: Replace with actual current sensor reading (e.g., ACS712, INA219)
-    // For now, generate random current values for demonstration
-    static float base_current_2 = 0.0f;
-    
-    // Simulate different pattern for second channel
-    base_current_2 += ((float)(esp_random() % 150) - 75.0f) / 150.0f; // ±0.5A change
-    
-    // Keep within realistic bounds
-    if (base_current_2 > 10.0f) base_current_2 = 10.0f;
-    if (base_current_2 < -10.0f) base_current_2 = -10.0f;
-    
-    return base_current_2;
+    float current_a = 0.0f;
+    if (ads1118_read_current(&ads1118_handle, ADS1118_MUX_A1_GND, &current_sensor_config, &current_a) != ESP_OK) {
+        ESP_LOGW(TAG, "ADS1118 read current 2 failed, returning 0");
+        return 0.0f;
+    }
+    return current_a;
 }
 
 /**
@@ -635,6 +654,7 @@ void app_main(void) {
     spi_init();
     display_init();
     joystick_init();
+    ads1118_current_sensor_init();
 
     // Initialize LVGL
     ESP_LOGI(TAG, "Initializing LVGL");
